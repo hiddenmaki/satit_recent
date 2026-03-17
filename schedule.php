@@ -116,7 +116,7 @@ if ($showSchedule && !empty($filter_classroom_id)) {
 <div class="card shadow-sm-light border-0">
     <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
         <h6 class="m-0 font-weight-bold text-dark">ตารางเรียน: <?= htmlspecialchars($targetClassroomName) ?></h6>
-        <button class="btn btn-sm btn-outline-primary" onclick="window.print()"><i class="fas fa-print me-1"></i>พิมพ์ตาราง</button>
+        <button class="btn btn-sm btn-outline-primary" onclick="window.print()"><i class="fas fa-file-pdf me-1"></i>บันทึกเป็น PDF</button>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive text-center">
@@ -137,10 +137,8 @@ if ($showSchedule && !empty($filter_classroom_id)) {
                     
                     foreach ($days as $engDay => $thaiDay) {
                         echo "<tr>";
-                        echo "<td class='align-middle fw-bold bg-light'>{$thaiDay}</td>";
+                        echo "<td class='align-middle fw-bold bg-light border-end'>{$thaiDay}</td>";
                         
-                        // Just a simplified 4-slot mockup logic for presentation based on our DB times
-                        // In a real complex app, you'd iterate through strict time slots and find overlapping DB entries
                         $slots = [
                             ['08:30:00', '10:10:00'],
                             ['10:10:00', '12:00:00'],
@@ -153,8 +151,9 @@ if ($showSchedule && !empty($filter_classroom_id)) {
                         
                         foreach ($slots as $idx => $slot) {
                             if (isset($slot[2]) && $slot[2] == 'break') {
-                                if($idx == 2) echo "<td class='align-middle bg-light text-muted fw-bold' rowspan='5' style='writing-mode: vertical-rl; text-orientation: mixed;'>พักกลางวัน</td>"; // Only print once, CSS handles rowspans usually differently, but for this simple table we'll just put it. Wait, rowspan on a td across trs needs it on the first tr only. Let's simplify.
-                                if($engDay == 'Monday') echo "<td class='align-middle bg-light text-muted fw-bold' rowspan='5'>พัก<br>กลาง<br>วัน</td>";
+                                if($engDay == 'Monday') {
+                                    echo "<td class='align-middle bg-light text-muted fw-bold border-end border-start' rowspan='5'>พักกลางวัน</td>";
+                                }
                                 continue;
                             }
                             
@@ -165,10 +164,10 @@ if ($showSchedule && !empty($filter_classroom_id)) {
                                     if(strpos($d['subject_code'], 'ค') !== false) $bg = 'var(--bs-primary)';
                                     if(strpos($d['subject_code'], 'อ') !== false) $bg = 'var(--bs-warning)';
                                     
-                                    echo "<td>
-                                        <div class='p-2 border rounded bg-white shadow-sm' style='border-left: 3px solid {$bg} !important;'>
-                                            <div class='fw-bold text-dark small'>" . htmlspecialchars($d['subject_code']) . " " . htmlspecialchars($d['subject_name']) . "</div>
-                                            <div class='text-muted' style='font-size:0.75rem;'>ครู" . htmlspecialchars($d['first_name']) . "</div>
+                                    echo "<td class='align-middle'>
+                                        <div class='p-2 border rounded shadow-sm bg-white' style='border-left: 4px solid {$bg} !important; height: 100%;'>
+                                            <div class='fw-bold text-dark mb-1' style='font-size: 0.9rem;'>" . htmlspecialchars($d['subject_code']) . " " . htmlspecialchars($d['subject_name']) . "</div>
+                                            <div class='text-muted' style='font-size:0.8rem;'><i class='fas fa-user-circle me-1'></i>" . htmlspecialchars($d['first_name']) . " " . htmlspecialchars($d['last_name']) . "</div>
                                         </div>
                                     </td>";
                                     $found = true;
@@ -177,7 +176,7 @@ if ($showSchedule && !empty($filter_classroom_id)) {
                             }
                             
                             if(!$found) {
-                                echo "<td><div class='p-2 text-muted small border-0'></div></td>";
+                                echo "<td class='align-middle'><div class='p-2' style='height: 100%; min-height: 60px;'></div></td>";
                             }
                         }
                         echo "</tr>";
@@ -281,5 +280,65 @@ if ($showSchedule && !empty($filter_classroom_id)) {
   </div>
 </div>
 <?php endif; ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('addScheduleModal');
+    if (!modal) return;
+    
+    const teacherSelect = modal.querySelector('select[name="teacher_id"]');
+    const classroomSelect = modal.querySelector('select[name="classroom_id"]');
+    const daySelect = modal.querySelector('select[name="day_of_week"]');
+    const startSelect = modal.querySelector('select[name="start_time"]');
+    const endSelect = modal.querySelector('select[name="end_time"]');
+    
+    // Auto-select end_time based on start_time
+    startSelect.addEventListener('change', function() {
+        endSelect.selectedIndex = startSelect.selectedIndex;
+    });
+
+    const checkConflicts = () => {
+        const teacher_id = teacherSelect.value;
+        const classroom_id = classroomSelect.value;
+        const day = daySelect.value;
+        const academic_year = modal.querySelector('input[name="academic_year"]').value;
+        const semester = modal.querySelector('input[name="semester"]').value;
+        
+        if(!teacher_id || !classroom_id || !day || !academic_year || !semester) return;
+        
+        fetch(`api/get_booked_slots.php?teacher_id=${teacher_id}&classroom_id=${classroom_id}&day=${day}&academic_year=${academic_year}&semester=${semester}`)
+            .then(res => res.json())
+            .then(data => {
+                const bookedStartTimes = data.map(slot => slot.start_time);
+                
+                let firstAvailableFound = false;
+                Array.from(startSelect.options).forEach(opt => {
+                    // Reset styles
+                    opt.disabled = false;
+                    opt.text = opt.text.replace(' (ทับซ้อน)', '');
+                    opt.style.color = '';
+                    
+                    if (bookedStartTimes.includes(opt.value)) {
+                        opt.disabled = true;
+                        opt.text += ' (ทับซ้อน)';
+                        opt.style.color = 'red';
+                    } else if (!firstAvailableFound) {
+                        firstAvailableFound = true;
+                        if (startSelect.options[startSelect.selectedIndex].disabled) {
+                            startSelect.value = opt.value;
+                            endSelect.selectedIndex = startSelect.selectedIndex;
+                        }
+                    }
+                });
+            });
+    };
+
+    teacherSelect.addEventListener('change', checkConflicts);
+    classroomSelect.addEventListener('change', checkConflicts);
+    daySelect.addEventListener('change', checkConflicts);
+
+    modal.addEventListener('shown.bs.modal', checkConflicts);
+});
+</script>
 
 <?php include 'includes/footer.php'; ?>
