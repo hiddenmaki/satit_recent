@@ -9,7 +9,7 @@ requireRole('admin');
 // Helper for Profile Picture
 function uploadProfilePicture($file, $oldFile = null) {
     if (isset($file) && $file['error'] === UPLOAD_ERR_OK) {
-        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'jfif'];
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if (in_array($ext, $allowed)) {
             $newName = uniqid('prof_') . '.' . $ext;
