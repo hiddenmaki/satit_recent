@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div>
         <h3 class="text-dark fw-bold mb-0">โปรไฟล์ส่วนตัว</h3>
         <p class="text-muted mb-0">จัดการบัญชีผู้ใช้และตั้งค่าความปลอดภัย</p>

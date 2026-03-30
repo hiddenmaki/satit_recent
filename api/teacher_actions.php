@@ -9,7 +9,7 @@ requireRole('admin');
 // Helper for Profile Picture
 function uploadProfilePicture($file, $oldFile = null) {
     if (isset($file) && $file['error'] === UPLOAD_ERR_OK) {
-        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'jfif'];
+        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'jfif', 'gif'];
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if (in_array($ext, $allowed)) {
             $newName = uniqid('prof_') . '.' . $ext;
@@ -35,7 +35,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // === CREATE TEACHER ===
     if ($action === 'create') {
         $t_code = trim($_POST['teacher_code']);
-        $password = password_hash($_POST['password'], PASSWORD_BCRYPT);
+        
+        $rawPassword = $_POST['password'];
+        if (!preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])[a-zA-Z0-9]+$/', $rawPassword)) {
+            header("Location: ../master-teacher.php?status=err_password");
+            exit();
+        }
+        $password = password_hash($rawPassword, PASSWORD_BCRYPT);
+        
         $prefix = trim($_POST['prefix']);
         $fname = trim($_POST['first_name']);
         $lname = trim($_POST['last_name']);
@@ -89,7 +96,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Handle password update if provided
             if (!empty($_POST['password'])) {
-                $password = password_hash($_POST['password'], PASSWORD_BCRYPT);
+                $rawPassword = $_POST['password'];
+                if (!preg_match('/^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])[a-zA-Z0-9]+$/', $rawPassword)) {
+                    header("Location: ../master-teacher.php?status=err_password");
+                    exit();
+                }
+                $password = password_hash($rawPassword, PASSWORD_BCRYPT);
                 $stmtPwd = $pdo->prepare("UPDATE users SET password = ?, prefix = ?, first_name = ?, last_name = ? WHERE id = ?");
                 $stmtPwd->execute([$password, $prefix, $fname, $lname, $user_id]);
             } else {
@@ -102,7 +114,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmtGetPic->execute([$teacher_id]);
             $oldPic = $stmtGetPic->fetchColumn();
 
-            $profilePic = uploadProfilePicture($_FILES['profile_picture'] ?? null, $oldPic);
+            $removePic = $_POST['remove_profile_picture'] ?? '0';
+            if ($removePic == '1') {
+                if ($oldPic && file_exists('../uploads/profiles/' . $oldPic)) {
+                    unlink('../uploads/profiles/' . $oldPic);
+                }
+                $profilePic = null;
+            } else {
+                $profilePic = uploadProfilePicture($_FILES['profile_picture'] ?? null, $oldPic);
+            }
 
             // Update Teacher Details
             $stmtTeacher = $pdo->prepare("UPDATE teachers SET department_id = ?, phone = ?, line_id = ?, profile_picture = ? WHERE id = ?");

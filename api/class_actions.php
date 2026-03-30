@@ -11,14 +11,46 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $action = $_POST['action'] ?? '';
 
 if ($action === 'create') {
+    $class_code = trim($_POST['class_code']);
     $level_name = trim($_POST['level_name']);
     
+    // Check for duplicate class_code or level_name
+    $stmtDup = $pdo->prepare("SELECT id FROM classes WHERE class_code = ? OR level_name = ?");
+    $stmtDup->execute([$class_code, $level_name]);
+    if ($stmtDup->fetch()) {
+        header("Location: ../master-class.php?status=err_duplicate");
+        exit();
+    }
+    
     try {
-        $stmt = $pdo->prepare("INSERT INTO classes (level_name) VALUES (?)");
-        $stmt->execute([$level_name]);
-        header("Location: ../master-class.php?status=success&msg=เพิ่มระดับชั้นเรียบร้อยแล้ว");
+        $stmt = $pdo->prepare("INSERT INTO classes (class_code, level_name) VALUES (?, ?)");
+        $stmt->execute([$class_code, $level_name]);
+        header("Location: ../master-class.php?status=success_add");
     } catch (PDOException $e) {
-        header("Location: ../master-class.php?status=error&msg=ระบบไม่สามารถเพิ่มข้อมูลได้ ระดับชั้นอาจซ้ำกัน");
+        header("Location: ../master-class.php?status=error");
+    }
+    exit();
+}
+
+if ($action === 'update') {
+    $id = $_POST['class_id'];
+    $class_code = trim($_POST['class_code']);
+    $level_name = trim($_POST['level_name']);
+    
+    // Check for duplicate class_code or level_name EXCEPT self
+    $stmtDup = $pdo->prepare("SELECT id FROM classes WHERE (class_code = ? OR level_name = ?) AND id != ?");
+    $stmtDup->execute([$class_code, $level_name, $id]);
+    if ($stmtDup->fetch()) {
+        header("Location: ../master-class.php?status=err_duplicate");
+        exit();
+    }
+    
+    try {
+        $stmt = $pdo->prepare("UPDATE classes SET class_code = ?, level_name = ? WHERE id = ?");
+        $stmt->execute([$class_code, $level_name, $id]);
+        header("Location: ../master-class.php?status=success_edit");
+    } catch (PDOException $e) {
+        header("Location: ../master-class.php?status=error");
     }
     exit();
 }
@@ -28,9 +60,9 @@ if ($action === 'delete') {
     try {
         $stmt = $pdo->prepare("DELETE FROM classes WHERE id = ?");
         $stmt->execute([$id]);
-        header("Location: ../master-class.php?status=success&msg=ลบข้อมูลระดับชั้นเรียบร้อยแล้ว");
+        header("Location: ../master-class.php?status=success_delete");
     } catch (PDOException $e) {
-        header("Location: ../master-class.php?status=error&msg=ไม่สามารถลบข้อมูลได้ อาจมีการใช้งานระดับชั้นนี้อยู่");
+        header("Location: ../master-class.php?status=err_delete_fk");
     }
     exit();
 }

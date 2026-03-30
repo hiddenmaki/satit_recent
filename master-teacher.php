@@ -5,7 +5,7 @@ requireRole('admin');
 include 'includes/header.php';
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div>
         <h3 class="text-dark fw-bold mb-0">ข้อมูลบุคลากรครู</h3>
         <nav aria-label="breadcrumb">
@@ -52,6 +52,11 @@ include 'includes/header.php';
             (เช่น ตารางสอน)
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
+    <?php elseif ($_GET['status'] == 'err_password'): ?>
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i> รหัสผ่านต้องผสมกันระหว่าง <b>ตัวพิมพ์ใหญ่</b>, <b>ตัวพิมพ์เล็ก</b> และ <b>ตัวเลข</b> เท่านั้น
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
     <?php else: ?>
         <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0" role="alert">
             <i class="fas fa-times-circle me-2"></i> เกิดข้อผิดพลาดในระบบฐานข้อมูล
@@ -61,7 +66,7 @@ include 'includes/header.php';
 <?php endif; ?>
 
 <div class="card shadow-sm-light">
-    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+    <div class="card-header bg-white py-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center border-bottom gap-3">
         <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-list me-2"></i>รายชื่อครูทั้งหมด</h6>
         <form method="GET" action="master-teacher.php" class="input-group" style="width: 300px;">
             <input type="text" name="search" class="form-control form-control-sm bg-light border-0"
@@ -273,7 +278,7 @@ include 'includes/header.php';
                     <div class="mb-3">
                         <label class="form-label fw-medium text-muted small">รหัสผ่านเริ่มต้น *</label>
                         <input type="password" name="password" class="form-control bg-light"
-                            placeholder="รหัสผ่านสำหรับเข้าสู่ระบบ" required>
+                            placeholder="รหัสผ่านสำหรับเข้าสู่ระบบ" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9]+" title="ต้องมีตัวพิมพ์ใหญ่, ตัวพิมพ์เล็ก และตัวเลขผสมกัน" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-medium text-muted small">คำนำหน้า *</label>
@@ -312,7 +317,7 @@ include 'includes/header.php';
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label fw-medium text-muted small">เบอร์โทรศัพท์ (ไม่บังคับ)</label>
-                            <input type="tel" name="phone" class="form-control bg-light" placeholder="08x-xxx-xxxx">
+                            <input type="tel" name="phone" class="form-control bg-light" placeholder="08x-xxx-xxxx" pattern="[0-9\-]{9,13}" maxlength="13" title="กรุณากรอกหมายเลขโทรศัพท์ที่ถูกต้อง (ตัวเลขและขีด - เท่านั้น)">
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label fw-medium text-muted small">LINE ID (ไม่บังคับ)</label>
@@ -350,8 +355,13 @@ include 'includes/header.php';
                             style="width:80px;height:80px;object-fit:cover;border:2px solid var(--accent-color);">
                         <div>
                             <label class="form-label fw-medium text-muted small">อัปเดตรูปโปรไฟล์</label>
-                            <input type="file" name="profile_picture" class="form-control form-control-sm bg-light"
-                                accept="image/*">
+                            <input type="file" name="profile_picture" class="form-control form-control-sm bg-light" accept="image/*">
+                            <div class="form-check text-start mt-2">
+                                <input class="form-check-input" type="checkbox" name="remove_profile_picture" id="edit_teacher_remove_pic" value="1">
+                                <label class="form-check-label text-danger small" style="padding-top:2px;" for="edit_teacher_remove_pic">
+                                    ลบรูปโปรไฟล์ปัจจุบัน
+                                </label>
+                            </div>
                         </div>
                     </div>
 
@@ -363,7 +373,7 @@ include 'includes/header.php';
                     <div class="mb-3">
                         <label class="form-label fw-medium text-muted small">รหัสผ่านใหม่
                             (ปล่อยว่างถ้าไม่เปลี่ยน)</label>
-                        <input type="password" name="password" class="form-control bg-light" placeholder="••••••••">
+                        <input type="password" name="password" class="form-control bg-light" placeholder="••••••••" pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9]+" title="ต้องมีตัวพิมพ์ใหญ่, ตัวพิมพ์เล็ก และตัวเลขผสมกัน">
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-medium text-muted small">คำนำหน้า *</label>
@@ -402,7 +412,7 @@ include 'includes/header.php';
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label fw-medium text-muted small">เบอร์โทรศัพท์</label>
-                            <input type="tel" name="phone" id="edit_phone" class="form-control bg-light">
+                            <input type="tel" name="phone" id="edit_phone" class="form-control bg-light" pattern="[0-9\-]{9,13}" maxlength="13" title="กรุณากรอกหมายเลขโทรศัพท์ที่ถูกต้อง">
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label fw-medium text-muted small">LINE ID</label>

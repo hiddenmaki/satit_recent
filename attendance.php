@@ -95,7 +95,7 @@ if ($role === 'admin' || $role === 'teacher') {
     }
 ?>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div>
         <h3 class="text-dark fw-bold mb-0">บันทึกเวลาเรียน</h3>
         <p class="text-muted mb-0">เช็คชื่อนักเรียนรายคาบเรียน</p>
