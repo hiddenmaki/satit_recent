@@ -148,13 +148,22 @@ body {
 }
 
 .sidebar.active ul li a {
-  padding: 15px 0;
+  padding: 15px 0 !important;
   justify-content: center;
+  width: 70px !important;
+  box-sizing: border-box;
 }
 
 .sidebar.active ul li a i {
   margin-right: 0 !important;
   font-size: 1.2rem;
+  width: 100% !important;
+  text-align: center;
+}
+
+/* Hide chevron down when sidebar is active/collapsed so it doesn't misalign the icons */
+.sidebar.active ul li a i.fa-chevron-down {
+  display: none !important;
 }
 
 .sidebar ul li a:hover,
@@ -182,8 +191,16 @@ body {
   font-size: 0.85rem;
 }
 
+/* Allow submenu to open natively even when collapsed */
 .sidebar.active .sub-menu {
-  display: none !important;
+  width: 70px !important;
+  overflow-x: hidden !important;
+}
+
+.sidebar.active .sub-menu li a {
+  padding: 15px 0 !important;
+  justify-content: center;
+  width: 70px !important;
 }
 
 /* Toggle Button */

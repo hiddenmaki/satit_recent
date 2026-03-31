@@ -45,7 +45,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $error = "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อ Admin";
                         $_SESSION['login_attempts']++;
                         $_SESSION['last_attempt_time'] = time();
-                    } 
+                    }
                     // 4. Secure Password Verification (using BCRYPT)
                     else if (password_verify($pass, $userData['password'])) {
                         // 5. Prevent Session Fixation attacks
@@ -56,7 +56,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $_SESSION['role'] = $userData['role'];
                         $_SESSION['full_name'] = $userData['prefix'] . $userData['first_name'] . ' ' . $userData['last_name'];
                         $_SESSION['login_attempts'] = 0; // Reset
-                        
+
                         // Update Last Login Time
                         $updateStmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
                         $updateStmt->execute([$userData['id']]);
@@ -68,7 +68,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             header("Location: schedule.php");
                         } else {
                             // Student can view schedule for now
-                            header("Location: schedule.php"); 
+                            header("Location: schedule.php");
                         }
                         exit();
                     } else {
@@ -89,13 +89,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 ?>
 <!DOCTYPE html>
 <html lang="th">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>เข้าสู่ระบบ - โรงเรียนสาธิตวิทยา</title>
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="assets/images/favicon.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600&display=swap"
+        rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="assets/css/style.css">
@@ -107,33 +110,39 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             align-items: center;
             justify-content: center;
         }
+
         .login-card {
             background: var(--surface-color);
             border-radius: 15px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
             overflow: hidden;
             width: 100%;
             max-width: 450px;
         }
+
         .login-header {
             background: rgba(44, 62, 80, 0.03);
             padding: 30px;
             text-align: center;
-            border-bottom: 1px solid rgba(0,0,0,0.05);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
+
         .login-body {
             padding: 40px 30px;
         }
+
         .form-control {
             background: var(--bg-color);
-            border: 1px solid rgba(0,0,0,0.05);
+            border: 1px solid rgba(0, 0, 0, 0.05);
             padding: 12px 15px;
         }
+
         .form-control:focus {
             box-shadow: none;
             border-color: var(--accent-color);
             background: #fff;
         }
+
         .btn-login {
             background-color: var(--accent-color);
             border: none;
@@ -141,59 +150,69 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             font-weight: 600;
             letter-spacing: 0.5px;
         }
+
         .btn-login:hover {
             background-color: #2980b9;
         }
     </style>
 </head>
+
 <body>
 
-<div class="login-card">
-    <div class="login-header">
-        <img src="assets/images/logo.png" alt="Satit School Logo" class="img-fluid rounded-circle shadow-sm mb-3" style="max-width: 90px; border: 3px solid #fff;">
-        <h4 class="fw-bold text-dark mb-1" style="letter-spacing: 1px;">สาธิตวิทยา</h4>
-        <p class="text-muted small mb-0">ระบบบริหารจัดการสถานศึกษา (Elite Academy)</p>
-    </div>
-    <div class="login-body">
-        <h5 class="fw-semibold mb-4 text-center">ลงชื่อเข้าใช้งาน</h5>
-        
-        <?php if (!empty($error)): ?>
-            <div class="alert alert-danger py-2 small fw-medium" role="alert">
-                <i class="fas fa-exclamation-circle me-2"></i> <?php echo htmlspecialchars($error); ?>
-            </div>
-        <?php endif; ?>
+    <div class="login-card">
+        <div class="login-header">
+            <img src="assets/images/logo.png" alt="Satit School Logo" class="img-fluid rounded-circle shadow-sm mb-3"
+                style="max-width: 90px; border: 3px solid #fff;">
+            <h4 class="fw-bold text-dark mb-1" style="letter-spacing: 1px;">สาธิตวิทยา</h4>
+            <p class="text-muted small mb-0">ระบบบริหารจัดการสถานศึกษา (Elite Academy)</p>
+        </div>
+        <div class="login-body">
+            <h5 class="fw-semibold mb-4 text-center">ลงชื่อเข้าใช้งาน</h5>
 
-        <form action="login.php" method="POST">
-            <!-- CSRF Token Hidden Input -->
-            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
-
-            <div class="mb-3">
-                <label class="form-label text-muted small fw-medium">ชื่อผู้ใช้งาน (รหัสประจำตัว)</label>
-                <div class="input-group">
-                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-user"></i></span>
-                    <input type="text" name="username" class="form-control border-start-0" placeholder="ระบุชื่อผู้ใช้งาน" required autocomplete="username">
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-danger py-2 small fw-medium" role="alert">
+                    <i class="fas fa-exclamation-circle me-2"></i> <?php echo htmlspecialchars($error); ?>
                 </div>
-            </div>
+            <?php endif; ?>
 
-            <div class="mb-4">
-                <div class="d-flex justify-content-between">
-                    <label class="form-label text-muted small fw-medium">รหัสผ่าน</label>
-                    <a href="#" class="small text-decoration-none" style="color: var(--accent-color);">ลืมรหัสผ่าน?</a>
+            <form action="login.php" method="POST">
+                <!-- CSRF Token Hidden Input -->
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
+
+                <div class="mb-3">
+                    <label class="form-label text-muted small fw-medium">ชื่อผู้ใช้งาน (รหัสประจำตัว)</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted"><i
+                                class="fas fa-user"></i></span>
+                        <input type="text" name="username" class="form-control border-start-0"
+                            placeholder="ระบุชื่อผู้ใช้งาน" required autocomplete="username">
+                    </div>
                 </div>
-                <div class="input-group">
-                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-lock"></i></span>
-                    <input type="password" name="password" class="form-control border-start-0" placeholder="ระบุรหัสผ่าน" required autocomplete="current-password">
+
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between">
+                        <label class="form-label text-muted small fw-medium">รหัสผ่าน</label>
+                        <a href="forgot-password.php" class="small text-decoration-none"
+                            style="color: var(--accent-color);">ลืมรหัสผ่าน?</a>
+                    </div>
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0 text-muted"><i
+                                class="fas fa-lock"></i></span>
+                        <input type="password" name="password" class="form-control border-start-0"
+                            placeholder="ระบุรหัสผ่าน" required autocomplete="current-password">
+                    </div>
                 </div>
+
+                <button type="submit" class="btn btn-primary w-100 btn-login shadow-sm text-white">เข้าสู่ระบบ</button>
+            </form>
+
+            <div class="text-center mt-4">
+                <small class="text-muted"><i class="fas fa-shield-alt me-1"></i> เชื่อมต่อผ่านระบบรักษาความปลอดภัย
+                    256-bit</small>
             </div>
-
-            <button type="submit" class="btn btn-primary w-100 btn-login shadow-sm text-white">เข้าสู่ระบบ</button>
-        </form>
-
-        <div class="text-center mt-4">
-            <small class="text-muted"><i class="fas fa-shield-alt me-1"></i> เชื่อมต่อผ่านระบบรักษาความปลอดภัย 256-bit</small>
         </div>
     </div>
-</div>
 
 </body>
+
 </html>

@@ -177,6 +177,34 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
         <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
             <h6 class="m-0 fw-bold text-dark"><i class="fas fa-calendar-alt me-2 text-primary"></i>ตารางเรียน:
                 <?= htmlspecialchars($filterLabel) ?></h6>
+            
+            <style>
+                @media print {
+                    /* Hide everything not related to the table */
+                    body * {
+                        visibility: hidden;
+                    }
+                    /* Only show the print area */
+                    .card.shadow-sm-light.border-0.mb-4, 
+                    .card.shadow-sm-light.border-0.mb-4 * {
+                        visibility: visible;
+                    }
+                    /* Absolute position the print area to the top left of the page */
+                    .card.shadow-sm-light.border-0.mb-4 {
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                        width: 100%;
+                        border: none !important;
+                        box-shadow: none !important;
+                    }
+                    /* Hide the print button itself */
+                    .btn-outline-primary, .card-header .btn {
+                        display: none !important;
+                    }
+                }
+            </style>
+            
             <button class="btn btn-sm btn-outline-primary" onclick="window.print()"><i
                     class="fas fa-print me-1"></i>พิมพ์</button>
         </div>

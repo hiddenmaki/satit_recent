@@ -13,7 +13,7 @@ require_once 'includes/db.php';
             <ol class="breadcrumb mb-0 py-1">
                 <li class="breadcrumb-item"><a href="index.php" class="text-decoration-none text-muted">Dashboard</a></li>
                 <li class="breadcrumb-item text-muted">ข้อมูลพื้นฐาน</li>
-                <li class="breadcrumb-item active" aria-current="page">ข้อมูลรายวิชา</li>
+                <li class="breadcrumb-item active" aria-current="page"><a href="master-subject.php" class="text-dark text-decoration-none">ข้อมูลรายวิชา</a></li>
             </ol>
         </nav>
     </div>

@@ -13,11 +13,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $action = $_POST['action'] ?? '';
 
 // Grade calculation: 80-100=4, 70-79=3, 60-69=2, 50-59=1, 0-49=0
-function calculateGrade($score) {
-    if ($score >= 80) return 4;
-    if ($score >= 70) return 3;
-    if ($score >= 60) return 2;
-    if ($score >= 50) return 1;
+function calculateGrade($score)
+{
+    if ($score >= 80)
+        return 4;
+    if ($score >= 70)
+        return 3;
+    if ($score >= 60)
+        return 2;
+    if ($score >= 50)
+        return 1;
     return 0;
 }
 
@@ -37,13 +42,16 @@ if ($action === 'save_grades') {
 
         foreach ($student_ids as $sid) {
             $score = $raw_scores[$sid] ?? '';
-            if ($score === '' || $score === null) continue; // Skip empty inputs
-            
+            if ($score === '' || $score === null)
+                continue; // Skip empty inputs
+
             $scoreInt = intval($score);
             // Clamp to 0-100
-            if ($scoreInt < 0) $scoreInt = 0;
-            if ($scoreInt > 100) $scoreInt = 100;
-            
+            if ($scoreInt < 0)
+                $scoreInt = 0;
+            if ($scoreInt > 100)
+                $scoreInt = 100;
+
             // Auto-calculate grade
             $grade = calculateGrade($scoreInt);
 
