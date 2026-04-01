@@ -232,8 +232,8 @@ if ($role === 'admin' || $role === 'teacher') {
     <div class="col-xl-4 col-lg-5">
         <div class="card h-100 border-0 shadow-sm-light">
             <div class="card-header bg-white py-3 border-0">
-                <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-medal me-2 text-warning"></i>ภาพรวมผลการเรียน</h6>
-                <small class="text-muted">การกระจายเกรดทั้งระบบ</small>
+                <h6 class="mb-0 fw-bold text-dark"><i class="fas fa-medal me-2 text-warning"></i>ภาพรวม GPA นักเรียน</h6>
+                <small class="text-muted">จำนวนนักเรียนจำแนกตามระดับเกรดเฉลี่ย</small>
             </div>
             <div class="card-body d-flex justify-content-center align-items-center">
                 <div id="gradeChart" style="height: 300px; width: 100%;"></div>
@@ -521,10 +521,10 @@ $(document).ready(function() {
         if (data.success && data.distribution.total > 0) {
             var d = data.distribution;
             var options = {
-                series: [d.grade_4, d.grade_3, d.grade_2, d.grade_1, d.grade_0],
-                labels: ['เกรด 4', 'เกรด 3', 'เกรด 2', 'เกรด 1', 'เกรด 0'],
+                series: [d.grade_4, d.grade_3, d.grade_2, d.grade_1],
+                labels: ['GPA ≥3.5 (ดีมาก)', 'GPA 2.5-3.49 (ดี)', 'GPA 1.5-2.49 (พอใช้)', 'GPA <1.5 (ปรับปรุง)'],
                 chart: { type: 'donut', height: 300, fontFamily: 'Prompt, Inter, sans-serif' },
-                colors: ['#2ecc71', '#3498db', '#f1c40f', '#e67e22', '#e74c3c'],
+                colors: ['#2ecc71', '#3498db', '#f1c40f', '#e74c3c'],
                 plotOptions: {
                     pie: {
                         donut: {
@@ -534,8 +534,8 @@ $(document).ready(function() {
                                 name: { show: true },
                                 value: { show: true, formatter: function(val) { return val + ' คน'; } },
                                 total: {
-                                    show: true, label: 'ทั้งหมด',
-                                    formatter: function(w) { return w.globals.seriesTotals.reduce((a, b) => a + b, 0) + ' รายการ'; }
+                                    show: true, label: 'นักเรียนทั้งหมด',
+                                    formatter: function(w) { return w.globals.seriesTotals.reduce((a, b) => a + b, 0) + ' คน'; }
                                 }
                             }
                         }

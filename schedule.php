@@ -1,28 +1,31 @@
 <?php
-// schedule.php - Schedule Management (Enhanced)
+// schedule.php - จัดการตารางเรียนและตารางสอน (เวอร์ชันปรับปรุง)
 require_once 'includes/auth.php';
 require_once 'includes/db.php';
 include 'includes/header.php';
 
+// ดึงข้อมูลพื้นฐานจาก Session
 $role = $_SESSION['role'] ?? '';
 $user_id = $_SESSION['user_id'] ?? 0;
 
-// Filters
+// ตัวแปรสำหรับเก็บค่าการกรอง (Filter)
 $filter_class_id = $_GET['class_id'] ?? '';
 $filter_classroom_id = $_GET['classroom_id'] ?? '';
 
-// Fetch all master data for dropdowns
+// ดึงข้อมูล Master Data สำหรับแสดงใน Dropdown (วิชา, ครู, ชั้นเรียน, ห้องเรียน)
 $allSubjects = $pdo->query("SELECT id, subject_code, name FROM subjects ORDER BY subject_code ASC")->fetchAll();
-$allTeachers = $pdo->query("SELECT t.id, t.teacher_code, u.prefix, u.first_name, u.last_name FROM teachers t JOIN users u ON t.user_id = u.id ORDER BY u.first_name ASC")->fetchAll();
+$allTeachers = $pdo->query("SELECT t.id, t.teacher_code, u.prefix, u.first_name, u.last_name, d.name AS dept_name FROM teachers t JOIN users u ON t.user_id = u.id LEFT JOIN departments d ON t.department_id = d.id ORDER BY u.first_name ASC")->fetchAll();
 $allClasses = $pdo->query("SELECT id, class_code, level_name FROM classes ORDER BY level_name ASC")->fetchAll();
 $allRooms = $pdo->query("SELECT id, room_code, room_number, room_name FROM classrooms ORDER BY room_code ASC")->fetchAll();
 
-// Determine what to show based on role
+// --- ส่วนกำหนดโลจิกการแสดงผลตามบทบาท (Role-based Logic) ---
 $showSchedule = false;
 $scheduleData = [];
 $filterLabel = "";
+$current_teacher_id = 0;
 
 if ($role === 'student') {
+    // ถ้านักเรียนเข้าดู: ให้ดึง class_id ของนักเรียนคนนั้นมาแสดงตารางของห้องตัวเองทันที
     $stmt = $pdo->prepare("SELECT class_id FROM students WHERE user_id = ?");
     $stmt->execute([$user_id]);
     $student = $stmt->fetch();
@@ -31,57 +34,84 @@ if ($role === 'student') {
         $showSchedule = true;
     }
 } else if ($role === 'teacher') {
+    // ถ้าครูเข้าดู: ค้นหา teacher_id และตั้งค่าให้แสดง "ตารางสอนส่วนตัว" เป็นค่าเริ่มต้น
+    $stmtT = $pdo->prepare("SELECT id FROM teachers WHERE user_id = ?");
+    $stmtT->execute([$user_id]);
+    $teacherData = $stmtT->fetch();
+    $current_teacher_id = $teacherData ? $teacherData['id'] : 0;
     $showSchedule = true;
+    $filterLabel = "ตารางสอนส่วนตัว";
 } else if ($role === 'admin') {
+    // ถ้า Admin เข้าดู: ต้องเลือกชั้นเรียนหรือห้องเรียนก่อนถึงจะแสดงตาราง
     if (!empty($filter_class_id) || !empty($filter_classroom_id)) {
         $showSchedule = true;
     }
 }
 
-// Fetch Schedule Data
-if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id))) {
-    $whereField = '';
-    $whereValue = '';
+// --- ส่วนการดึงข้อมูลตารางเรียน (Fetch Schedule Data) ---
+if ($showSchedule) {
+    $whereParts = [];
+    $params = [];
 
-    if (!empty($filter_class_id)) {
-        $whereField = 'ts.class_id';
-        $whereValue = $filter_class_id;
-        // Get class label
-        $sl = $pdo->prepare("SELECT level_name FROM classes WHERE id = ?");
-        $sl->execute([$filter_class_id]);
-        $filterLabel = $sl->fetchColumn() ?: '';
-    } elseif (!empty($filter_classroom_id)) {
-        $whereField = 'ts.classroom_id';
-        $whereValue = $filter_classroom_id;
-        $sl = $pdo->prepare("SELECT room_name FROM classrooms WHERE id = ?");
-        $sl->execute([$filter_classroom_id]);
-        $filterLabel = $sl->fetchColumn() ?: '';
+    // ถ้าเป็นครู: บังคับให้กรองดึงเฉพาะวิชาที่ตัวเองสอน (เพื่อลดความสับสนตามที่คุณแจ้งมา)
+    if ($role === 'teacher' && $current_teacher_id) {
+        $whereParts[] = "ts.teacher_id = ?";
+        $params[] = $current_teacher_id;
     }
 
-    $stmt = $pdo->prepare("
-        SELECT ts.*, 
-               sub.name as subject_name, sub.subject_code, 
-               u.first_name as teacher_fname, u.last_name as teacher_lname, u.prefix as teacher_prefix,
-               cl.level_name,
-               cr.room_name, cr.room_code
-        FROM teaching_schedule ts
-        JOIN subjects sub ON ts.subject_id = sub.id
-        JOIN teachers t ON ts.teacher_id = t.id
-        JOIN users u ON t.user_id = u.id
-        LEFT JOIN classes cl ON ts.class_id = cl.id
-        LEFT JOIN classrooms cr ON ts.classroom_id = cr.id
-        WHERE {$whereField} = ?
-        ORDER BY FIELD(ts.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), ts.start_time ASC
-    ");
-    $stmt->execute([$whereValue]);
-    $scheduleDataRaw = $stmt->fetchAll();
+    // กรองตามชั้นเรียน (ถ้ามีการเลือก)
+    if (!empty($filter_class_id)) {
+        $whereParts[] = "ts.class_id = ?";
+        $params[] = $filter_class_id;
+        
+        $sl = $pdo->prepare("SELECT level_name FROM classes WHERE id = ?");
+        $sl->execute([$filter_class_id]);
+        $classLabel = $sl->fetchColumn() ?: '';
+        $filterLabel = ($role === 'teacher' ? "ตารางสอนส่วนตัว - " : "") . $classLabel;
+    } 
+    // กรองตามห้องเรียน (สำหรับ Admin)
+    elseif (!empty($filter_classroom_id)) {
+        $whereParts[] = "ts.classroom_id = ?";
+        $params[] = $filter_classroom_id;
+        
+        $sl = $pdo->prepare("SELECT room_name FROM classrooms WHERE id = ?");
+        $sl->execute([$filter_classroom_id]);
+        $roomLabel = $sl->fetchColumn() ?: '';
+        $filterLabel = ($role === 'teacher' ? "ตารางสอนส่วนตัว - " : "") . $roomLabel;
+    }
 
-    // Group by Day
-    foreach ($scheduleDataRaw as $row) {
-        $day = $row['day_of_week'];
-        if (!isset($scheduleData[$day]))
-            $scheduleData[$day] = [];
-        $scheduleData[$day][] = $row;
+    // ตรวจสอบว่ามีเงื่อนไขการกรองหรือไม่ (ครูจะผ่านเงื่อนไขนี้ได้โดยไม่ต้องเลือกชั้นเรียน)
+    if (count($whereParts) > 0) {
+        $whereSql = "WHERE " . implode(" AND ", $whereParts);
+
+        // คำสั่ง SQL หลักในการดึงข้อมูลตารางสอน พร้อม Join ตารางที่เกี่ยวข้อง
+        $stmt = $pdo->prepare("
+            SELECT ts.*, 
+                   sub.name as subject_name, sub.subject_code, 
+                   u.first_name as teacher_fname, u.last_name as teacher_lname, u.prefix as teacher_prefix,
+                   cl.level_name,
+                   cr.room_name, cr.room_code
+            FROM teaching_schedule ts
+            JOIN subjects sub ON ts.subject_id = sub.id
+            JOIN teachers t ON ts.teacher_id = t.id
+            JOIN users u ON t.user_id = u.id
+            LEFT JOIN classes cl ON ts.class_id = cl.id
+            LEFT JOIN classrooms cr ON ts.classroom_id = cr.id
+            {$whereSql}
+            ORDER BY FIELD(ts.day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), ts.start_time ASC
+        ");
+        $stmt->execute($params);
+        $scheduleDataRaw = $stmt->fetchAll();
+
+        // นำข้อมูลที่ดึงมาได้ มาจัดกลุ่มรายวัน (Monday, Tuesday, ...) เพื่อให้ง่ายต่อการวน Loop แสดงผล
+        foreach ($scheduleDataRaw as $row) {
+            $day = $row['day_of_week'];
+            if (!isset($scheduleData[$day]))
+                $scheduleData[$day] = [];
+            $scheduleData[$day][] = $row;
+        }
+    } else {
+        $showSchedule = false; // ถ้าไม่มีเงื่อนไขใดๆ เลย ก็ไม่ต้องแสดงตาราง
     }
 }
 ?>
@@ -136,13 +166,13 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
     <div class="card shadow-sm-light mb-4">
         <div class="card-header bg-white py-3 border-bottom">
             <h6 class="m-0 font-weight-bold text-primary"><i
-                    class="fas fa-filter me-2"></i>เลือกดูตารางเรียนตามชั้นเรียนหรือห้องเรียน</h6>
+                    class="fas fa-filter me-2"></i>เลือกดูตารางเรียนตามชั้นเรียน</h6>
         </div>
         <div class="card-body">
             <form method="GET" action="schedule.php" class="row g-3 align-items-end">
-                <div class="col-md-4">
+                <div class="col-md-8">
                     <label class="form-label small text-muted">ชั้นเรียน</label>
-                    <select class="form-select bg-light" name="class_id">
+                    <select class="form-select bg-light" name="class_id" required>
                         <option value="">-- เลือกชั้นเรียน --</option>
                         <?php foreach ($allClasses as $c): ?>
                             <option value="<?= $c['id'] ?>" <?= ($filter_class_id == $c['id']) ? 'selected' : '' ?>>
@@ -151,18 +181,7 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
                     </select>
                 </div>
                 <div class="col-md-4">
-                    <label class="form-label small text-muted">หรือ ห้องเรียน</label>
-                    <select class="form-select bg-light" name="classroom_id">
-                        <option value="">-- เลือกห้องเรียน --</option>
-                        <?php foreach ($allRooms as $r): ?>
-                            <option value="<?= $r['id'] ?>" <?= ($filter_classroom_id == $r['id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars(($r['room_code'] ? $r['room_code'] . ' - ' : '') . $r['room_name']) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <button type="submit" class="btn btn-primary shadow-sm"
+                    <button type="submit" class="btn btn-primary shadow-sm w-100"
                         style="background-color: var(--accent-color); border: none;">
                         <i class="fas fa-search me-2"></i>แสดงตาราง
                     </button>
@@ -172,7 +191,7 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
     </div>
 <?php endif; ?>
 
-<?php if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id))): ?>
+<?php if ($showSchedule): ?>
     <div class="card shadow-sm-light border-0 mb-4">
         <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
             <h6 class="m-0 fw-bold text-dark"><i class="fas fa-calendar-alt me-2 text-primary"></i>ตารางเรียน:
@@ -180,110 +199,170 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
             
             <style>
                 @media print {
-                    /* Hide everything not related to the table */
-                    body * {
-                        visibility: hidden;
+                    @page { 
+                        size: A4 landscape; 
+                        margin: 5mm; 
                     }
-                    /* Only show the print area */
-                    .card.shadow-sm-light.border-0.mb-4, 
-                    .card.shadow-sm-light.border-0.mb-4 * {
-                        visibility: visible;
+                    /* Reset everything */
+                    html, body, .wrapper, .main-panel, .content { 
+                        margin: 0 !important; 
+                        padding: 0 !important; 
+                        display: block !important; 
+                        width: 100% !important; 
+                        height: auto !important;
+                        min-height: 0 !important;
                     }
-                    /* Absolute position the print area to the top left of the page */
-                    .card.shadow-sm-light.border-0.mb-4 {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                        border: none !important;
+                    /* Hide Sidebar and other UI */
+                    .sidebar, .topbar, .footer, .btn, .no-print, .breadcrumb, h3 { 
+                        display: none !important; 
+                    }
+                    /* Container styling for print */
+                    #printArea { 
+                        display: block !important; 
+                        width: 100% !important; 
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        background: transparent !important;
+                    }
+                    .card { border: none !important; box-shadow: none !important; }
+                    .card-body { padding: 0 !important; }
+                    /* Table styling to fit on a single page */
+                    .table { 
+                        width: 100% !important; 
+                        table-layout: fixed !important; 
+                        font-size: 8px !important; 
+                        border-collapse: collapse !important;
+                        border: 1px solid #000 !important;
+                    }
+                    .table th, .table td { 
+                        padding: 1px !important; 
+                        line-height: 1 !important;
+                        border: 1px solid #333 !important;
+                        height: auto !important;
+                    }
+                    .schedule-cell { 
+                        min-height: 40px !important; 
+                        padding: 1px !important; 
+                        margin: 0 !important;
+                        border-left-width: 1px !important; 
                         box-shadow: none !important;
                     }
-                    /* Hide the print button itself */
-                    .btn-outline-primary, .card-header .btn {
-                        display: none !important;
-                    }
+                    .sc-code { font-size: 7.5px !important; }
+                    .sc-name { font-size: 7px !important; }
+                    .sc-teacher, .sc-room { font-size: 6.5px !important; }
                 }
+                .schedule-cell {
+                    padding: 4px !important;
+                    border-left: 3px solid #3498db !important;
+                    min-height: 60px;
+                    font-size: 0.7rem;
+                    text-align: left;
+                    background: #fff;
+                    border-radius: 4px;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                }
+                .schedule-cell .sc-code { font-weight: 700; color: #2c3e50; font-size: 0.72rem; }
+                .schedule-cell .sc-name { color: #555; font-size: 0.65rem; }
+                .schedule-cell .sc-teacher { color: #888; font-size: 0.62rem; }
+                .schedule-cell .sc-room { color: #3498db; font-size: 0.62rem; }
             </style>
             
-            <button class="btn btn-sm btn-outline-primary" onclick="window.print()"><i
+            <button class="btn btn-sm btn-outline-primary no-print" onclick="window.print()"><i
                     class="fas fa-print me-1"></i>พิมพ์</button>
         </div>
-        <div class="card-body p-0">
+        <div class="card-body p-0" id="printArea">
+            <!-- Print Header -->
+            <div class="d-none d-print-block text-center mb-3">
+                <h4 class="fw-bold mb-1">ตารางเรียน / ตารางสอน - โรงเรียนสาธิตวิทยา</h4>
+                <p class="mb-0">ระดับชั้น/ครูผู้สอน: <?= htmlspecialchars($filterLabel) ?> | ปีการศึกษา 2567 เทอม 1</p>
+            </div>
             <div class="table-responsive text-center">
-                <table class="table table-bordered mb-0 table-custom">
-                    <thead class="bg-light">
-                        <tr>
-                            <th width="10%">วัน/เวลา</th>
-                            <th width="18%">08:30 - 10:10<br><small class="text-muted">(คาบ 1-2)</small></th>
-                            <th width="18%">10:10 - 12:00<br><small class="text-muted">(คาบ 3-4)</small></th>
-                            <th width="10%">12:00 - 13:00</th>
-                            <th width="18%">13:00 - 14:40<br><small class="text-muted">(คาบ 5-6)</small></th>
-                            <th width="18%">14:40 - 16:20<br><small class="text-muted">(คาบ 7-8)</small></th>
+                <table class="table table-bordered mb-0" style="table-layout:fixed; font-size:0.8rem;">
+                    <thead>
+                        <tr class="bg-light">
+                            <th width="6%" class="align-middle py-2" style="font-size:0.75rem;">วัน</th>
+                            <th width="10.5%">08:30-09:20<br><small class="text-muted">คาบ 1</small></th>
+                            <th width="10.5%">09:20-10:10<br><small class="text-muted">คาบ 2</small></th>
+                            <th width="10.5%">10:20-11:10<br><small class="text-muted">คาบ 3</small></th>
+                            <th width="10.5%">11:10-12:00<br><small class="text-muted">คาบ 4</small></th>
+                            <th width="5%" class="bg-warning bg-opacity-10">พัก<br>🍽</th>
+                            <th width="10.5%">13:00-13:50<br><small class="text-muted">คาบ 5</small></th>
+                            <th width="10.5%">13:50-14:40<br><small class="text-muted">คาบ 6</small></th>
+                            <th width="10.5%">14:50-15:40<br><small class="text-muted">คาบ 7</small></th>
+                            <th width="10.5%">15:40-16:30<br><small class="text-muted">คาบ 8</small></th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php
                         $days = ['Monday' => 'จันทร์', 'Tuesday' => 'อังคาร', 'Wednesday' => 'พุธ', 'Thursday' => 'พฤหัสบดี', 'Friday' => 'ศุกร์'];
-                        $colors = ['#3498db', '#2c3e50', '#e67e22', '#27ae60', '#8e44ad', '#e74c3c', '#16a085'];
-                        $colorIndex = 0;
+                        $cellColors = ['#3498db', '#8e44ad', '#e67e22', '#27ae60', '#e74c3c', '#16a085', '#2c3e50', '#f39c12'];
+                        $cIdx = 0;
 
+                        // กำหนดเวลาเริ่มและเวลาเลิกของแต่ละคาบ (คาบ 1-8)
+                        $periodStarts = ['08:30:00', '09:20:00', '10:20:00', '11:10:00', '13:00:00', '13:50:00', '14:50:00', '15:40:00'];
+                        $periodEnds   = ['09:20:00', '10:10:00', '11:10:00', '12:00:00', '13:50:00', '14:40:00', '15:40:00', '16:30:00'];
+
+                        // วนลูปแสดงผลรายวัน (จันทร์-ศุกร์)
                         foreach ($days as $engDay => $thaiDay) {
                             echo "<tr>";
-                            echo "<td class='align-middle fw-bold bg-light border-end'>{$thaiDay}</td>";
-
-                            $slots = [
-                                ['08:30:00', '10:10:00'],
-                                ['10:10:00', '12:00:00'],
-                                ['12:00:00', '13:00:00', 'break'],
-                                ['13:00:00', '14:40:00'],
-                                ['14:40:00', '16:20:00']
-                            ];
+                            echo "<td class='align-middle fw-bold bg-light text-center py-2' style='font-size:0.8rem;'>{$thaiDay}</td>";
 
                             $dayData = $scheduleData[$engDay] ?? [];
 
-                            foreach ($slots as $idx => $slot) {
-                                if (isset($slot[2]) && $slot[2] == 'break') {
+                            // นำข้อมูลวิชาในวันนั้นๆ มาจับคู่กับเลขคาบ (Period Mapping)
+                            $periodMap = [];
+                            $periodSpan = [];
+                            foreach ($dayData as $d) {
+                                $si = array_search($d['start_time'], $periodStarts); // หาว่าเริ่มคาบไหน
+                                $ei = array_search($d['end_time'], $periodEnds);     // หาว่าจบคาบไหน
+                                if ($si !== false && $ei !== false) {
+                                    $periodMap[$si] = $d;
+                                    $periodSpan[$si] = $ei - $si + 1; // คำนวณว่าเรียนกี่คาบติดกัน (Colspan)
+                                    for ($k = $si + 1; $k <= $ei; $k++) $periodMap[$k] = 'skip'; // ถ้าเรียนยาว ให้ข้ามช่องถัดไป
+                                }
+                            }
+
+                            for ($p = 0; $p < 8; $p++) {
+                                // Lunch column after period 4
+                                if ($p == 4) {
                                     if ($engDay == 'Monday') {
-                                        echo "<td class='align-middle bg-light text-muted fw-bold' rowspan='5'>🍽<br>พักกลางวัน</td>";
-                                    }
-                                    continue;
-                                }
-
-                                $found = false;
-                                foreach ($dayData as $d) {
-                                    if ($d['start_time'] == $slot[0] && $d['end_time'] == $slot[1]) {
-                                        $bg = $colors[$colorIndex % count($colors)];
-                                        $colorIndex++;
-
-                                        $deleteBtn = '';
-                                        $editBtn = '';
-                                        if ($role === 'admin') {
-                                            $deleteBtn = "<form action='api/schedule_actions.php' method='POST' class='d-inline' onsubmit=\"return confirm('ยืนยันลบตารางสอนนี้?');\">
-                                            <input type='hidden' name='action' value='delete'>
-                                            <input type='hidden' name='id' value='{$d['id']}'>
-                                            <input type='hidden' name='redirect_class_id' value='{$filter_class_id}'>
-                                            <input type='hidden' name='redirect_classroom_id' value='{$filter_classroom_id}'>
-                                            <button type='submit' class='btn btn-sm p-0 text-danger' title='ลบ' style='font-size:0.7rem;'><i class='fas fa-times'></i></button>
-                                        </form>";
-                                            $editBtn = "<button type='button' class='btn btn-sm p-0 text-primary me-1' title='แก้ไข' style='font-size:0.7rem;' onclick='openEditSchedule(" . json_encode($d) . ")' data-bs-toggle='modal' data-bs-target='#editScheduleModal'><i class='fas fa-edit'></i></button>";
-                                        }
-
-                                        echo "<td class='align-middle p-1'>
-                                        <div class='p-2 border rounded shadow-sm bg-white position-relative' style='border-left: 4px solid {$bg} !important;'>
-                                            <div class='fw-bold text-dark mb-1' style='font-size:0.85rem;'>" . htmlspecialchars($d['subject_code']) . " " . htmlspecialchars($d['subject_name']) . "</div>
-                                            <div class='text-muted mb-1' style='font-size:0.75rem;'><i class='fas fa-user-circle me-1'></i>" . htmlspecialchars($d['teacher_prefix'] . $d['teacher_fname'] . ' ' . $d['teacher_lname']) . "</div>
-                                            <div class='text-muted' style='font-size:0.75rem;'><i class='fas fa-door-open me-1'></i>" . htmlspecialchars($d['room_name'] ?? '-') . "</div>";
-                                        if ($role === 'admin') {
-                                            echo "<div class='position-absolute top-0 end-0 p-1'>{$editBtn}{$deleteBtn}</div>";
-                                        }
-                                        echo "</div></td>";
-                                        $found = true;
-                                        break;
+                                        echo "<td class='align-middle bg-warning bg-opacity-10 text-muted text-center' rowspan='5' style='font-size:0.7rem;'>พักกลางวัน<br>12:00-13:00</td>";
                                     }
                                 }
 
-                                if (!$found) {
-                                    echo "<td class='align-middle'><div class='p-2' style='min-height:70px;'></div></td>";
+                                if (isset($periodMap[$p])) {
+                                    if ($periodMap[$p] === 'skip') continue;
+                                    $d = $periodMap[$p];
+                                    $span = $periodSpan[$p] ?? 1;
+                                    $bg = $cellColors[$cIdx % count($cellColors)];
+                                    $cIdx++;
+                                    $colAttr = $span > 1 ? " colspan='{$span}'" : "";
+
+                                    $adminBtns = '';
+                                    if ($role === 'admin') {
+                                        $adminBtns = "<div class='position-absolute top-0 end-0 p-1 no-print'>
+                                            <button type='button' class='btn btn-sm p-0 text-primary me-1' title='แก้ไข' style='font-size:0.6rem;' onclick='openEditSchedule(" . json_encode($d) . ")' data-bs-toggle='modal' data-bs-target='#editScheduleModal'><i class='fas fa-edit'></i></button>
+                                            <form action='api/schedule_actions.php' method='POST' class='d-inline' onsubmit=\"return confirm('ลบ?');\">
+                                                <input type='hidden' name='action' value='delete'>
+                                                <input type='hidden' name='id' value='{$d['id']}'>
+                                                <input type='hidden' name='redirect_class_id' value='{$filter_class_id}'>
+                                                <input type='hidden' name='redirect_classroom_id' value='{$filter_classroom_id}'>
+                                                <button type='submit' class='btn btn-sm p-0 text-danger' style='font-size:0.6rem;'><i class='fas fa-times'></i></button>
+                                            </form>
+                                        </div>";
+                                    }
+
+                                    echo "<td class='align-middle p-1'{$colAttr}>
+                                        <div class='schedule-cell position-relative' style='border-left-color:{$bg} !important;'>
+                                            <div class='sc-code'>" . htmlspecialchars($d['subject_code']) . "</div>
+                                            <div class='sc-name'>" . htmlspecialchars($d['subject_name']) . "</div>
+                                            <div class='sc-teacher'><i class='fas fa-user me-1'></i>" . htmlspecialchars($d['teacher_prefix'] . $d['teacher_fname'] . ' ' . $d['teacher_lname']) . "</div>
+                                            <div class='sc-room'><i class='fas fa-door-open me-1'></i>" . htmlspecialchars($d['room_name'] ?? '-') . "</div>
+                                            {$adminBtns}
+                                        </div>
+                                    </td>";
+                                } else {
+                                    echo "<td class='align-middle p-1'><div style='min-height:60px;background:#f8f9fa;border-radius:4px;'></div></td>";
                                 }
                             }
                             echo "</tr>";
@@ -296,34 +375,49 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
     </div>
 
     <!-- Schedule List Table with Pagination -->
-    <?php if ($role === 'admin'): ?>
+    <?php if ($role === 'admin' || $role === 'teacher'): ?>
         <?php
-        $listLimit = 5;
+        $listLimit = 10; // More items for teachers
         $listPage = isset($_GET['spage']) && is_numeric($_GET['spage']) ? (int) $_GET['spage'] : 1;
         $listOffset = ($listPage - 1) * $listLimit;
 
-        $listWhere = !empty($filter_class_id) ? "ts.class_id = :fid" : "ts.classroom_id = :fid";
-        $listFid = !empty($filter_class_id) ? $filter_class_id : $filter_classroom_id;
+        $listWhereParts = [];
+        $listParams = [];
 
-        $countSql = "SELECT COUNT(*) FROM teaching_schedule ts WHERE " . $listWhere;
+        if ($role === 'teacher' && $current_teacher_id) {
+            $listWhereParts[] = "ts.teacher_id = :tid";
+            $listParams['tid'] = $current_teacher_id;
+        }
+
+        if (!empty($filter_class_id)) {
+            $listWhereParts[] = "ts.class_id = :fid";
+            $listParams['fid'] = $filter_class_id;
+        } elseif (!empty($filter_classroom_id)) {
+            $listWhereParts[] = "ts.classroom_id = :fid";
+            $listParams['fid'] = $filter_classroom_id;
+        }
+
+        $listWhereSql = count($listWhereParts) > 0 ? "WHERE " . implode(" AND ", $listWhereParts) : "";
+
+        $countSql = "SELECT COUNT(*) FROM teaching_schedule ts " . $listWhereSql;
         $stmtC = $pdo->prepare($countSql);
-        $stmtC->bindValue(':fid', $listFid, PDO::PARAM_INT);
+        foreach ($listParams as $k => $v) $stmtC->bindValue(":{$k}", $v, is_numeric($v) ? PDO::PARAM_INT : PDO::PARAM_STR);
         $stmtC->execute();
         $listTotal = $stmtC->fetchColumn();
         $listTotalPages = ceil($listTotal / $listLimit);
 
         $listSql = "SELECT ts.*, sub.subject_code, sub.name as subject_name, u.prefix as tprefix, u.first_name as tfname, u.last_name as tlname, cl.level_name, cr.room_name 
-    FROM teaching_schedule ts 
-    JOIN subjects sub ON ts.subject_id = sub.id 
-    JOIN teachers t ON ts.teacher_id = t.id 
-    JOIN users u ON t.user_id = u.id 
-    LEFT JOIN classes cl ON ts.class_id = cl.id 
-    LEFT JOIN classrooms cr ON ts.classroom_id = cr.id 
-    WHERE " . $listWhere . " 
-    ORDER BY FIELD(ts.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday'), ts.start_time ASC 
-    LIMIT :lim OFFSET :off";
+            FROM teaching_schedule ts 
+            JOIN subjects sub ON ts.subject_id = sub.id 
+            JOIN teachers t ON ts.teacher_id = t.id 
+            JOIN users u ON t.user_id = u.id 
+            LEFT JOIN classes cl ON ts.class_id = cl.id 
+            LEFT JOIN classrooms cr ON ts.classroom_id = cr.id 
+            " . $listWhereSql . " 
+            ORDER BY FIELD(ts.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday'), ts.start_time ASC 
+            LIMIT :lim OFFSET :off";
         $stmtL = $pdo->prepare($listSql);
-        $stmtL->bindValue(':fid', $listFid, PDO::PARAM_INT);
+        foreach ($listParams as $k => $v) $stmtL->bindValue(":{$k}", $v, is_numeric($v) ? PDO::PARAM_INT : PDO::PARAM_STR);
         $stmtL->bindValue(':lim', $listLimit, PDO::PARAM_INT);
         $stmtL->bindValue(':off', $listOffset, PDO::PARAM_INT);
         $stmtL->execute();
@@ -334,8 +428,7 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
 
         <div class="card shadow-sm-light mb-4">
             <div class="card-header bg-white py-3 border-bottom">
-                <h6 class="m-0 fw-bold text-primary"><i class="fas fa-list me-2"></i>รายการตารางสอนทั้งหมด (<?= $listTotal ?>
-                    รายการ)</h6>
+                <h6 class="m-0 fw-bold text-primary"><i class="fas fa-list me-2"></i><?= $role === 'teacher' ? 'รายการสอนของคุณ' : 'รายการตารางสอนทั้งหมด' ?> (<?= $listTotal ?> รายการ)</h6>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -365,18 +458,22 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
                                         </td>
                                         <td><?= htmlspecialchars($item['room_name'] ?? '-') ?></td>
                                         <td class="text-center">
-                                            <button type="button" class="btn btn-sm btn-light text-primary me-1"
-                                                onclick='openEditSchedule(<?= json_encode($item) ?>)' data-bs-toggle="modal"
-                                                data-bs-target="#editScheduleModal" title="แก้ไข"><i class="fas fa-edit"></i></button>
-                                            <form action="api/schedule_actions.php" method="POST" class="d-inline"
-                                                onsubmit="return confirm('ยืนยันลบ?');">
-                                                <input type="hidden" name="action" value="delete">
-                                                <input type="hidden" name="id" value="<?= $item['id'] ?>">
-                                                <input type="hidden" name="redirect_class_id" value="<?= $filter_class_id ?>">
-                                                <input type="hidden" name="redirect_classroom_id" value="<?= $filter_classroom_id ?>">
-                                                <button type="submit" class="btn btn-sm btn-light text-danger" title="ลบ"><i
-                                                        class="fas fa-trash"></i></button>
-                                            </form>
+                                            <?php if ($role === 'admin'): ?>
+                                                <button type="button" class="btn btn-sm btn-light text-primary me-1"
+                                                    onclick='openEditSchedule(<?= json_encode($item) ?>)' data-bs-toggle="modal"
+                                                    data-bs-target="#editScheduleModal" title="แก้ไข"><i class="fas fa-edit"></i></button>
+                                                <form action="api/schedule_actions.php" method="POST" class="d-inline"
+                                                    onsubmit="return confirm('ยืนยันลบ?');">
+                                                    <input type="hidden" name="action" value="delete">
+                                                    <input type="hidden" name="id" value="<?= $item['id'] ?>">
+                                                    <input type="hidden" name="redirect_class_id" value="<?= $filter_class_id ?>">
+                                                    <input type="hidden" name="redirect_classroom_id" value="<?= $filter_classroom_id ?>">
+                                                    <button type="submit" class="btn btn-sm btn-light text-danger" title="ลบ"><i
+                                                            class="fas fa-trash"></i></button>
+                                                </form>
+                                            <?php else: ?>
+                                                <span class="text-muted small">-</span>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -466,7 +563,7 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
                                 <option disabled selected value="">-- เลือกครูผู้สอน --</option>
                                 <?php foreach ($allTeachers as $t): ?>
                                     <option value="<?= $t['id'] ?>">
-                                        <?= htmlspecialchars($t['teacher_code'] . ' - ' . $t['prefix'] . $t['first_name'] . ' ' . $t['last_name']) ?>
+                                        <?= htmlspecialchars($t['teacher_code'] . ' - ' . $t['prefix'] . $t['first_name'] . ' ' . $t['last_name'] . (!empty($t['dept_name']) ? ' (' . $t['dept_name'] . ')' : '')) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -576,7 +673,7 @@ if ($showSchedule && (!empty($filter_class_id) || !empty($filter_classroom_id)))
                             <select name="teacher_id" id="edit_teacher_id" class="form-select bg-light" required>
                                 <?php foreach ($allTeachers as $t): ?>
                                     <option value="<?= $t['id'] ?>">
-                                        <?= htmlspecialchars($t['teacher_code'] . ' - ' . $t['prefix'] . $t['first_name'] . ' ' . $t['last_name']) ?>
+                                        <?= htmlspecialchars($t['teacher_code'] . ' - ' . $t['prefix'] . $t['first_name'] . ' ' . $t['last_name'] . (!empty($t['dept_name']) ? ' (' . $t['dept_name'] . ')' : '')) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>

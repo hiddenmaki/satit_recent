@@ -1,5 +1,5 @@
 <?php
-// profile.php - User Profile Management
+// profile.php - จัดการข้อมูลโปรไฟล์ส่วนตัวของผู้ใช้งาน
 require_once 'includes/auth.php';
 require_once 'includes/db.php';
 include 'includes/header.php';
@@ -7,26 +7,27 @@ include 'includes/header.php';
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
 
-// --- Auto-migrate users table to support profile_picture for Admin ---
-if ($role === 'admin') {
-    try {
-        $pdo->exec("ALTER TABLE users ADD COLUMN profile_picture VARCHAR(255) NULL AFTER status");
-    } catch (PDOException $e) {
-        // Column already exists or error, ignore safely
-    }
+// --- ส่วนปรับปรุงฐานข้อมูลอัตโนมัติ (รองรับรูปโปรไฟล์สำหรับทุกบทบาท) ---
+try {
+    $pdo->exec("ALTER TABLE users ADD COLUMN profile_picture VARCHAR(255) NULL AFTER status");
+} catch (PDOException $e) {
+    // ถ้ามีคอลัมน์อยู่แล้วให้ข้ามไป (Safe ignore)
 }
 
-// Fetch current user data based on role
+// --- ส่วนดึงข้อมูลผู้ใช้งานตามบทบาท (Role-based Data Fetching) ---
 $userData = [];
 if ($role === 'admin') {
+    // ถ้าเป็น Admin: ดึงข้อมูลจากตาราง users ตรงๆ
     $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
     $stmt->execute([$user_id]);
     $userData = $stmt->fetch();
 } else if ($role === 'teacher') {
+    // ถ้าเป็นครู: Join ตาราง users กับ teachers เพื่อเอาข้อมูลเบอร์โทรและรหัสครู
     $stmt = $pdo->prepare("SELECT u.*, t.phone, t.line_id, t.profile_picture as t_pic, t.teacher_code FROM users u JOIN teachers t ON u.id = t.user_id WHERE u.id = ?");
     $stmt->execute([$user_id]);
     $userData = $stmt->fetch();
 } else if ($role === 'student') {
+    // ถ้าเป็นนักเรียน: Join ตาราง users, students และ classes เพื่อเอาข้อมูลห้องเรียนและรหัสนักเรียน
     $stmt = $pdo->prepare("SELECT u.*, s.student_code, s.dob, s.address, s.profile_picture as s_pic, c.level_name 
                            FROM users u 
                            JOIN students s ON u.id = s.user_id 
@@ -36,12 +37,13 @@ if ($role === 'admin') {
     $userData = $stmt->fetch();
 }
 
-// Determine current profile picture path
+// --- ส่วนจัดการรูปโปรไฟล์ (Profile Picture Logic) ---
 $fullName = trim(($userData['prefix'] ?? '') . ' ' . $userData['first_name'] . ' ' . $userData['last_name']);
-$currentPic = 'https://ui-avatars.com/api/?name=' . urlencode($userData['first_name']) . '&background=random&size=150'; // Fallback
+$currentPic = 'https://ui-avatars.com/api/?name=' . urlencode($userData['first_name']) . '&background=random&size=150'; // ค่าเริ่มต้นถ้าไม่มีรูป
 $hasCustomPic = false;
 
-if ($role === 'admin' && !empty($userData['profile_picture'])) {
+// ตรวจสอบลำดับการแสดงรูป (ลำดับความสำคัญ: ตาราง users > ตารางเฉพาะบทบาท)
+if (!empty($userData['profile_picture'])) {
     $currentPic = 'uploads/profiles/' . $userData['profile_picture'];
     $hasCustomPic = true;
 } elseif ($role === 'teacher' && !empty($userData['t_pic'])) {
@@ -52,13 +54,15 @@ if ($role === 'admin' && !empty($userData['profile_picture'])) {
     $hasCustomPic = true;
 }
 
-// Prepare generic full name
+// เตรียมชื่อเต็มสำหรับแสดงผล
 $fullName = trim(($userData['prefix'] ?? '') . ' ' . $userData['first_name'] . ' ' . $userData['last_name']);
 ?>
 
+<!-- ส่วนแสดงผล UI (User Interface) -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h3 class="text-dark fw-bold mb-0">โปรไฟล์ส่วนตัว</h3>
+... (เนื้อหา Breadcrumb) ...
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb mb-0 py-1">
                 <li class="breadcrumb-item"><a href="index.php" class="text-decoration-none text-muted">Dashboard</a></li>
@@ -80,7 +84,7 @@ $fullName = trim(($userData['prefix'] ?? '') . ' ' . $userData['first_name'] . '
     <?php elseif ($_GET['status'] === 'err_pwd_match'): ?>
         <div class="alert alert-warning alert-dismissible fade show shadow-sm border-0"><i class="fas fa-exclamation-circle me-2"></i>รหัสผ่านใหม่และการยืนยันไม่ตรงกัน<button class="btn-close" data-bs-dismiss="alert"></button></div>
     <?php elseif ($_GET['status'] === 'err_upload'): ?>
-        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0"><i class="fas fa-times-circle me-2"></i>เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ (รองรับเฉพาะ JPG, PNG ขนาดไม่เกิน 5MB)<button class="btn-close" data-bs-dismiss="alert"></button></div>
+        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0"><i class="fas fa-times-circle me-2"></i>เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ (รองรับเฉพาะ JPG, PNG, WEBP, GIF, JFIF ขนาดไม่เกิน 5MB)<button class="btn-close" data-bs-dismiss="alert"></button></div>
     <?php else: ?>
         <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0"><i class="fas fa-times-circle me-2"></i>เกิดข้อผิดพลาด กรุณาลองใหม่<button class="btn-close" data-bs-dismiss="alert"></button></div>
     <?php endif; ?>
@@ -98,7 +102,7 @@ $fullName = trim(($userData['prefix'] ?? '') . ' ' . $userData['first_name'] . '
                         <label for="avatarInput" class="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle p-2 shadow" style="cursor: pointer; transform: translate(10%, 10%);" title="เปลี่ยนรูปประจำตัว">
                             <i class="fas fa-camera"></i>
                         </label>
-                        <input type="file" id="avatarInput" name="profile_picture" class="d-none" accept=".jpg, .jpeg, .png">
+                        <input type="file" id="avatarInput" name="profile_picture" class="d-none" accept=".jpg, .jpeg, .png, .webp, .jfif, .gif">
                     </div>
                 </form>
 

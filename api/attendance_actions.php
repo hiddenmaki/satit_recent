@@ -13,6 +13,27 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $action = $_POST['action'] ?? '';
 
+// Global Teacher Access Verification for Schedule ID
+$schedule_id = $_POST['schedule_id'] ?? '';
+if (!empty($schedule_id) && $_SESSION['role'] === 'teacher') {
+    $stmtT = $pdo->prepare("SELECT id FROM teachers WHERE user_id = ?");
+    $stmtT->execute([$_SESSION['user_id']]);
+    $tData = $stmtT->fetch();
+    if (!$tData) die("Teacher profile not found");
+
+    $stmtVer = $pdo->prepare("SELECT id FROM teaching_schedule WHERE id = ? AND teacher_id = ?");
+    $stmtVer->execute([$schedule_id, $tData['id']]);
+    if (!$stmtVer->fetch()) {
+        if ($action === 'toggle_status') {
+            echo json_encode(['success' => false, 'message' => 'Unauthorized: Not your subject']);
+            exit();
+        } else {
+            header("Location: ../attendance.php?status=error&msg=" . urlencode("ปฏิเสธการเข้าถึง: คุณไม่สามารถเช็คชื่อวิชานี้ได้"));
+            exit();
+        }
+    }
+}
+
 // Status labels (Thai) for AJAX response
 $statusLabels = [
     'present' => 'มาเรียน',

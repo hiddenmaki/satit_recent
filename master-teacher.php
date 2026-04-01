@@ -1,10 +1,12 @@
 <?php
-// master-teacher.php - Teacher Management
+// master-teacher.php - จัดการข้อมูลบุคลากรครู (สำหรับ Admin เท่านั้น)
 require_once 'includes/auth.php';
+// บังคับให้เฉพาะผู้ใช้งานที่มีบทบาท 'admin' เข้าถึงหน้านี้ได้
 requireRole('admin');
 include 'includes/header.php';
 ?>
 
+<!-- ส่วนหัวของหน้า (Page Header) -->
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div>
         <h3 class="text-dark fw-bold mb-0">ข้อมูลบุคลากรครู</h3>
@@ -126,7 +128,7 @@ include 'includes/header.php';
                     $totalPages = ceil($totalRecords / $limit);
 
                     // Fetch actual data
-                    $sql = "SELECT t.*, d.name AS dept_name, u.first_name, u.last_name, u.prefix, u.username, u.status 
+                    $sql = "SELECT t.*, d.name AS dept_name, u.first_name, u.last_name, u.prefix, u.username, u.status, COALESCE(u.profile_picture, t.profile_picture) AS profile_picture 
                             FROM teachers t 
                             LEFT JOIN departments d ON t.department_id = d.id
                             INNER JOIN users u ON t.user_id = u.id" . $whereClause . 

@@ -37,6 +37,24 @@ if ($action === 'save_grades') {
     // Build redirect URL preserving filters
     $redirectBase = "../grading.php?subject_id={$subject_id}&class_id={$class_id}&academic_year={$academic_year}&semester={$semester}";
 
+    // Teacher permission check: ครูต้องสอนวิชานี้ในชั้นนี้จริงๆ เท่านั้น
+    if ($_SESSION['role'] === 'teacher') {
+        $stmtTeacher = $pdo->prepare("SELECT id FROM teachers WHERE user_id = ?");
+        $stmtTeacher->execute([$_SESSION['user_id']]);
+        $teacherRow = $stmtTeacher->fetch();
+        $teacher_id = $teacherRow ? $teacherRow['id'] : 0;
+
+        $stmtPerm = $pdo->prepare("
+            SELECT COUNT(*) FROM teaching_schedule 
+            WHERE teacher_id = ? AND subject_id = ? AND class_id = ? AND academic_year = ? AND semester = ?
+        ");
+        $stmtPerm->execute([$teacher_id, $subject_id, $class_id, $academic_year, $semester]);
+        if ($stmtPerm->fetchColumn() == 0) {
+            header("Location: {$redirectBase}&status=error&msg=" . urlencode("คุณไม่มีสิทธิ์บันทึกคะแนนวิชานี้ เนื่องจากไม่ได้สอนวิชานี้ในชั้นเรียนนี้"));
+            exit();
+        }
+    }
+
     try {
         $pdo->beginTransaction();
 

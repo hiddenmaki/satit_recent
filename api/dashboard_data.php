@@ -99,25 +99,33 @@ if ($action === 'attendance_summary') {
     exit();
 }
 
-// === ภาพรวมผลการเรียน (Grade Distribution) ===
+// === ภาพรวมผลการเรียน (GPA Distribution - นับจำนวนนักเรียน) ===
 if ($action === 'grade_distribution') {
+    // คำนวณ GPA เฉลี่ยของนักเรียนแต่ละคน แล้วจัดกลุ่ม
     $stmt = $pdo->query("
-        SELECT grade_level, COUNT(*) as cnt 
-        FROM grades 
-        WHERE grade_level IS NOT NULL 
-        GROUP BY grade_level 
-        ORDER BY grade_level DESC
+        SELECT 
+            SUM(CASE WHEN avg_gpa >= 3.5 THEN 1 ELSE 0 END) as excellent,
+            SUM(CASE WHEN avg_gpa >= 2.5 AND avg_gpa < 3.5 THEN 1 ELSE 0 END) as good,
+            SUM(CASE WHEN avg_gpa >= 1.5 AND avg_gpa < 2.5 THEN 1 ELSE 0 END) as fair,
+            SUM(CASE WHEN avg_gpa < 1.5 THEN 1 ELSE 0 END) as poor,
+            COUNT(*) as total
+        FROM (
+            SELECT student_id, AVG(grade_level) as avg_gpa 
+            FROM grades 
+            WHERE grade_level IS NOT NULL 
+            GROUP BY student_id
+        ) student_gpas
     ");
-    $rows = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
     
     $distribution = [
-        'grade_4' => (int)($rows[4] ?? 0),
-        'grade_3' => (int)($rows[3] ?? 0),
-        'grade_2' => (int)($rows[2] ?? 0),
-        'grade_1' => (int)($rows[1] ?? 0),
-        'grade_0' => (int)($rows[0] ?? 0)
+        'grade_4' => (int)($row['excellent'] ?? 0),
+        'grade_3' => (int)($row['good'] ?? 0),
+        'grade_2' => (int)($row['fair'] ?? 0),
+        'grade_1' => (int)($row['poor'] ?? 0),
+        'grade_0' => 0
     ];
-    $distribution['total'] = array_sum($distribution);
+    $distribution['total'] = (int)($row['total'] ?? 0);
     
     echo json_encode([
         'success' => true,

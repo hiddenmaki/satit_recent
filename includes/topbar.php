@@ -28,9 +28,11 @@
                 <li class="nav-item dropdown">
                     <a class="nav-link dropdown-toggle d-flex align-items-center profile-dropdown" href="#"
                         id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <div class="avatar-circle bg-primary-light text-primary fw-bold me-2">
-                            <?= isset($_SESSION['full_name']) ? mb_substr($_SESSION['full_name'], 0, 1, 'UTF-8') : 'U' ?>
-                        </div>
+                        <?php if (isset($_SESSION['profile_picture']) && !empty($_SESSION['profile_picture'])): ?>
+                            <img src="uploads/profiles/<?= htmlspecialchars($_SESSION['profile_picture']) ?>" alt="Profile" class="rounded-circle me-2 shadow-sm" style="width: 32px; height: 32px; object-fit: cover; border: 2px solid var(--accent-color);">
+                        <?php else: ?>
+                            <i class="fas fa-user-circle fs-4 text-secondary me-2"></i>
+                        <?php endif; ?>
                         <span class="d-none d-md-block text-dark fw-medium">
                             <?= htmlspecialchars($_SESSION['full_name'] ?? 'ผู้ใช้งาน') ?>
                             <span class="badge bg-secondary ms-1 fw-light" style="font-size: 0.7em;">

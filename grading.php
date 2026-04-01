@@ -1,5 +1,5 @@
 <?php
-// grading.php - Grading System (Enhanced)
+// grading.php - ระบบบันทึกผลการเรียน (ตัดเกรด)
 require_once 'includes/auth.php';
 require_once 'includes/db.php';
 include 'includes/header.php';
@@ -7,7 +7,11 @@ include 'includes/header.php';
 $role = $_SESSION['role'];
 $user_id = $_SESSION['user_id'];
 
-// Grade calculation function
+/**
+ * ฟังก์ชันสำหรับคำนวณเกรดจากคะแนนดิบ (Grade Calculation)
+ * @param int $score คะแนน (0-100)
+ * @return int เกรด (0, 1, 2, 3, 4)
+ */
 function calculateGradeFromScore($score) {
     if ($score >= 80) return 4;
     if ($score >= 70) return 3;
@@ -16,6 +20,9 @@ function calculateGradeFromScore($score) {
     return 0;
 }
 
+/**
+ * ฟังก์ชันสำหรับคืนค่า Class ของ Bootstrap ตามลำดับเกรด (เพื่อแสดงสีที่แตกต่างกัน)
+ */
 function gradeColorClass($grade) {
     if ($grade == 4) return 'bg-success';
     if ($grade == 3) return 'bg-info';
@@ -25,24 +32,26 @@ function gradeColorClass($grade) {
     return 'bg-secondary';
 }
 
-// Handling Teacher/Admin View
+// --- ส่วนจัดการมุมมองของครูและผู้ดูแลระบบ (Teacher/Admin View) ---
 if ($role === 'admin' || $role === 'teacher') {
     $teacher_id = 0;
     if ($role === 'teacher') {
+        // ถ้าเป็นครู: ค้นหา teacher_id เพื่อใช้ในการกรองวิชาที่ตัวเองเขาสอน
         $stmt = $pdo->prepare("SELECT id FROM teachers WHERE user_id = ?");
         $stmt->execute([$user_id]);
         $teacher = $stmt->fetch();
         if ($teacher) $teacher_id = $teacher['id'];
     }
 
-    // Filters
+    // ตัวแปรสำหรับการกรอง (วิชา, ชั้นเรียน, ปีการศึกษา, เทอม)
     $filter_subject_id = $_GET['subject_id'] ?? '';
     $filter_class_id = $_GET['class_id'] ?? '';
     $filter_academic_year = $_GET['academic_year'] ?? '2567';
     $filter_semester = $_GET['semester'] ?? '1';
 
-    // Fetch subjects dropdown (from subjects table, or only those assigned to this teacher)
+    // ดึงรายชื่อวิชามาแสดงใน Dropdown
     if ($role === 'teacher') {
+        // ถ้าเป็นครู: แสดงเฉพาะวิชาที่มีชื่อตัวเองในตารางสอน
         $stmtSubjects = $pdo->prepare("
             SELECT DISTINCT s.id, s.subject_code, s.name 
             FROM subjects s 
@@ -52,12 +61,14 @@ if ($role === 'admin' || $role === 'teacher') {
         ");
         $stmtSubjects->execute([$teacher_id]);
     } else {
+        // ถ้าเป็น Admin: แสดงวิชาทั้งหมด
         $stmtSubjects = $pdo->query("SELECT id, subject_code, name FROM subjects ORDER BY subject_code ASC");
     }
     $allSubjects = $stmtSubjects->fetchAll();
 
-    // Fetch classes dropdown
+    // ดึงรายชื่อชั้นเรียนมาแสดงใน Dropdown
     if ($role === 'teacher') {
+        // ถ้าเป็นครู: แสดงเฉพาะห้องที่ตัวเองไปสอน
         $stmtClasses = $pdo->prepare("
             SELECT DISTINCT cl.id, cl.level_name 
             FROM classes cl 
@@ -67,27 +78,28 @@ if ($role === 'admin' || $role === 'teacher') {
         ");
         $stmtClasses->execute([$teacher_id]);
     } else {
+        // ถ้าเป็น Admin: แสดงทุกห้องเรียน
         $stmtClasses = $pdo->query("SELECT id, level_name FROM classes ORDER BY level_name ASC");
     }
     $allClasses = $stmtClasses->fetchAll();
 
-    // Fetch students and their grades if both subject and class are selected
+    // --- ส่วนดึงข้อมูลนักเรียนและคะแนน (เมื่อเลือกวิชาและห้องเรียนแล้ว) ---
     $students = [];
     $subjectInfo = null;
     $classInfo = null;
     
     if (!empty($filter_subject_id) && !empty($filter_class_id)) {
-        // Get subject info
+        // ดึงข้อมูลวิชาที่เลือก
         $stmtSub = $pdo->prepare("SELECT * FROM subjects WHERE id = ?");
         $stmtSub->execute([$filter_subject_id]);
         $subjectInfo = $stmtSub->fetch();
         
-        // Get class info
+        // ดึงข้อมูลห้องเรียนที่เลือก
         $stmtCl = $pdo->prepare("SELECT * FROM classes WHERE id = ?");
         $stmtCl->execute([$filter_class_id]);
         $classInfo = $stmtCl->fetch();
         
-        // Fetch students in this class + their existing grades for this subject/year/semester
+        // ดึงรายชื่อนักเรียนในห้องนั้น พร้อม Join กับตารางเกรด (ถ้ามี) เพื่อแสดงคะแนนเดิม
         $stmtStudents = $pdo->prepare("
             SELECT st.id as student_id, st.student_code, u.prefix, u.first_name, u.last_name,
                    g.raw_score, g.grade_level, g.id as grade_id
@@ -143,7 +155,7 @@ if ($role === 'admin' || $role === 'teacher') {
         <form method="GET" action="grading.php" class="row g-3 align-items-end">
             <div class="col-md-3">
                 <label class="form-label small text-muted">รายวิชา *</label>
-                <select class="form-select bg-light" name="subject_id" required>
+                <select class="form-select bg-light" name="subject_id" id="subjectSelect" required>
                     <option value="">-- เลือกรายวิชา --</option>
                     <?php foreach ($allSubjects as $s): ?>
                         <option value="<?= $s['id'] ?>" <?= ($filter_subject_id == $s['id']) ? 'selected' : '' ?>>
@@ -154,7 +166,7 @@ if ($role === 'admin' || $role === 'teacher') {
             </div>
             <div class="col-md-3">
                 <label class="form-label small text-muted">ชั้นเรียน *</label>
-                <select class="form-select bg-light" name="class_id" required>
+                <select class="form-select bg-light" name="class_id" id="classSelect" required>
                     <option value="">-- เลือกชั้นเรียน --</option>
                     <?php foreach ($allClasses as $c): ?>
                         <option value="<?= $c['id'] ?>" <?= ($filter_class_id == $c['id']) ? 'selected' : '' ?>>
@@ -445,3 +457,39 @@ if ($student_id) {
 <?php } ?>
 
 <?php include 'includes/footer.php'; ?>
+
+<script>
+$(document).ready(function() {
+    var selectedClassId = '<?= $filter_class_id ?>';
+    
+    $('#subjectSelect').on('change', function() {
+        var subjectId = $(this).val();
+        var $classSelect = $('#classSelect');
+        
+        if (!subjectId) {
+            $classSelect.html('<option value="">-- เลือกรายวิชาก่อน --</option>');
+            return;
+        }
+        
+        $classSelect.html('<option value="">กำลังโหลด...</option>');
+        
+        $.getJSON('api/grading_classes.php', { subject_id: subjectId }, function(data) {
+            var html = '<option value="">-- เลือกชั้นเรียน --</option>';
+            if (data.success && data.classes.length > 0) {
+                data.classes.forEach(function(c) {
+                    var sel = (c.id == selectedClassId) ? ' selected' : '';
+                    html += '<option value="' + c.id + '"' + sel + '>' + c.level_name + '</option>';
+                });
+            } else {
+                html = '<option value="">-- ไม่มีชั้นเรียนสำหรับวิชานี้ --</option>';
+            }
+            $classSelect.html(html);
+        });
+    });
+
+    // Trigger on page load if subject is already selected
+    if ($('#subjectSelect').val()) {
+        $('#subjectSelect').trigger('change');
+    }
+});
+</script>

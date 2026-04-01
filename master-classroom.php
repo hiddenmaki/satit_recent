@@ -1,11 +1,13 @@
 <?php
-// master-classroom.php - Physical Room Management
+// master-classroom.php - จัดการข้อมูลสถานที่/ห้องเรียน (Physical Room) สำหรับ Admin
 require_once 'includes/auth.php';
+// บังคับให้เฉพาะผู้ที่มีบทบาท 'admin' เข้าถึงหน้านี้ได้
 requireRole('admin');
 include 'includes/header.php';
 require_once 'includes/db.php';
 ?>
 
+<!-- ส่วนหัวของหน้า (Page Header) -->
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div>
         <h3 class="text-dark fw-bold mb-0">ข้อมูลห้องเรียน</h3>

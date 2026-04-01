@@ -1,11 +1,13 @@
 <?php
-// master-class.php - Class Level Management
+// master-class.php - จัดการข้อมูลระดับชั้น (เช่น ม.4, ม.5) สำหรับ Admin
 require_once 'includes/auth.php';
+// บังคับให้เฉพาะผู้ที่มีบทบาท 'admin' เข้าถึงหน้านี้ได้
 requireRole('admin');
 include 'includes/header.php';
 require_once 'includes/db.php';
 ?>
 
+<!-- ส่วนหัวของหน้า (Page Header) -->
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div>
         <h3 class="text-dark fw-bold mb-0">ข้อมูลระดับชั้นเรียน</h3>

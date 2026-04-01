@@ -31,7 +31,7 @@ try {
         $file = $_FILES['profile_picture'];
 
         // 1. Validate Extension
-        $allowedExts = ['jpg', 'jpeg', 'png'];
+        $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'jfif', 'gif'];
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if (!in_array($ext, $allowedExts)) {
             header("Location: ../profile.php?status=err_upload");
@@ -47,7 +47,7 @@ try {
         // 3. Prevent XSS payload via MIME type or dummy extension
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $mime = finfo_file($finfo, $file['tmp_name']);
-        if (!in_array($mime, ['image/jpeg', 'image/png'])) {
+        if (!in_array($mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/pipeg'])) {
             header("Location: ../profile.php?status=err_upload");
             exit();
         }
@@ -63,24 +63,19 @@ try {
         $destPath = $uploadDir . $newFileName;
 
         if (move_uploaded_file($file['tmp_name'], $destPath)) {
-            // Delete old picture if exists to save disk space
-            $oldPic = null;
-            if ($role === 'admin') {
-                $s = $pdo->prepare("SELECT profile_picture FROM users WHERE id = ?");
-                $s->execute([$user_id]);
-                $oldPic = $s->fetchColumn();
-                $pdo->prepare("UPDATE users SET profile_picture = ? WHERE id = ?")->execute([$newFileName, $user_id]);
-            } elseif ($role === 'teacher') {
-                $s = $pdo->prepare("SELECT profile_picture FROM teachers WHERE user_id = ?");
-                $s->execute([$user_id]);
-                $oldPic = $s->fetchColumn();
-                $pdo->prepare("UPDATE teachers SET profile_picture = ? WHERE user_id = ?")->execute([$newFileName, $user_id]);
-            } elseif ($role === 'student') {
-                $s = $pdo->prepare("SELECT profile_picture FROM students WHERE user_id = ?");
-                $s->execute([$user_id]);
-                $oldPic = $s->fetchColumn();
-                $pdo->prepare("UPDATE students SET profile_picture = ? WHERE user_id = ?")->execute([$newFileName, $user_id]);
+            // Enforce unified storage in users table regardless of role
+            $s = $pdo->prepare("SELECT profile_picture FROM users WHERE id = ?");
+            $s->execute([$user_id]);
+            $oldPic = $s->fetchColumn();
+            
+            $pdo->prepare("UPDATE users SET profile_picture = ? WHERE id = ?")->execute([$newFileName, $user_id]);
+            // Clear legacy shadow tables to force unified loading
+            if ($role === 'teacher') {
+                $pdo->prepare("UPDATE teachers SET profile_picture = NULL WHERE user_id = ?")->execute([$user_id]);
+            } else if ($role === 'student') {
+                $pdo->prepare("UPDATE students SET profile_picture = NULL WHERE user_id = ?")->execute([$user_id]);
             }
+            $_SESSION['profile_picture'] = $newFileName;
 
             if ($oldPic && file_exists($uploadDir . $oldPic)) {
                 @unlink($uploadDir . $oldPic);
@@ -96,23 +91,18 @@ try {
     // ACTION: DELETE AVATAR (PROFILE PICTURE)
     // ==========================================
     if ($action === 'delete_avatar') {
-        $oldPic = null;
-        if ($role === 'admin') {
-            $s = $pdo->prepare("SELECT profile_picture FROM users WHERE id = ?");
-            $s->execute([$user_id]);
-            $oldPic = $s->fetchColumn();
-            $pdo->prepare("UPDATE users SET profile_picture = NULL WHERE id = ?")->execute([$user_id]);
-        } elseif ($role === 'teacher') {
-            $s = $pdo->prepare("SELECT profile_picture FROM teachers WHERE user_id = ?");
-            $s->execute([$user_id]);
-            $oldPic = $s->fetchColumn();
+        // Unified delete mechanism
+        $s = $pdo->prepare("SELECT profile_picture FROM users WHERE id = ?");
+        $s->execute([$user_id]);
+        $oldPic = $s->fetchColumn();
+        
+        $pdo->prepare("UPDATE users SET profile_picture = NULL WHERE id = ?")->execute([$user_id]);
+        if ($role === 'teacher') {
             $pdo->prepare("UPDATE teachers SET profile_picture = NULL WHERE user_id = ?")->execute([$user_id]);
-        } elseif ($role === 'student') {
-            $s = $pdo->prepare("SELECT profile_picture FROM students WHERE user_id = ?");
-            $s->execute([$user_id]);
-            $oldPic = $s->fetchColumn();
+        } else if ($role === 'student') {
             $pdo->prepare("UPDATE students SET profile_picture = NULL WHERE user_id = ?")->execute([$user_id]);
         }
+        $_SESSION['profile_picture'] = null;
 
         $uploadDir = '../uploads/profiles/';
         if ($oldPic && file_exists($uploadDir . $oldPic)) {

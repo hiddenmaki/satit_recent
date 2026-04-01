@@ -35,8 +35,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if ($_SESSION['login_attempts'] >= 5) {
                 $error = "คุณพยายามเข้าสู่ระบบผิดพลาดหลายครั้งเกินไป กรุณารอ 5 นาที";
             } else {
-                // 3. Prevent SQL Injection using PDO Prepared Statements
-                $stmt = $pdo->prepare("SELECT id, username, password, role, prefix, first_name, last_name, status FROM users WHERE username = ? LIMIT 1");
+                // 3. Prevent SQL Injection using PDO Prepared Statements with graceful fallback for legacy profile pictures
+                $stmt = $pdo->prepare("
+                    SELECT u.id, u.username, u.password, u.role, u.prefix, u.first_name, u.last_name, u.status, 
+                           COALESCE(u.profile_picture, t.profile_picture, s.profile_picture) as profile_picture
+                    FROM users u
+                    LEFT JOIN teachers t ON u.id = t.user_id AND u.role = 'teacher'
+                    LEFT JOIN students s ON u.id = s.user_id AND u.role = 'student'
+                    WHERE u.username = ? LIMIT 1
+                ");
                 $stmt->execute([$user]);
                 $userData = $stmt->fetch();
 
@@ -55,6 +62,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $_SESSION['username'] = $userData['username'];
                         $_SESSION['role'] = $userData['role'];
                         $_SESSION['full_name'] = $userData['prefix'] . $userData['first_name'] . ' ' . $userData['last_name'];
+                        $_SESSION['profile_picture'] = $userData['profile_picture'] ?? null;
                         $_SESSION['login_attempts'] = 0; // Reset
 
                         // Update Last Login Time

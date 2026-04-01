@@ -1,11 +1,13 @@
 <?php
-// master-student.php - Student Management
+// master-student.php - จัดการข้อมูลนักเรียน (สำหรับ Admin เท่านั้น)
 require_once 'includes/auth.php';
+// บังคับให้เฉพาะนักเรียนที่มีบทบาท 'admin' เข้าถึงหน้านี้ได้
 requireRole('admin');
 include 'includes/header.php';
 require_once 'includes/db.php';
 ?>
 
+<!-- ส่วนหัวของหน้า (Page Header) -->
 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div>
         <h3 class="text-dark fw-bold mb-0">ข้อมูลนักเรียน</h3>
@@ -104,7 +106,7 @@ $totalRecords = $stmtCount->fetchColumn();
 $totalPages = ceil($totalRecords / $limit);
 
 // Fetch data
-$sql = "SELECT s.*, u.prefix, u.first_name, u.last_name, u.username, cl.level_name 
+$sql = "SELECT s.*, u.prefix, u.first_name, u.last_name, u.username, cl.level_name, COALESCE(u.profile_picture, s.profile_picture) as profile_picture 
         FROM students s 
         JOIN users u ON s.user_id = u.id 
         LEFT JOIN classes cl ON s.class_id = cl.id

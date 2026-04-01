@@ -35,22 +35,49 @@ if ($action === 'create') {
     $end_time = $_POST['end_time'];
 
     try {
-        // Check time overlaps for teacher or classroom
+        // Check time overlaps for teacher, classroom, OR class (ชั้นเรียน)
         $stmtCheck = $pdo->prepare("
             SELECT id FROM teaching_schedule 
             WHERE day_of_week = ? 
             AND academic_year = ? 
             AND semester = ? 
-            AND ((teacher_id = ?) OR (classroom_id = ?))
+            AND ((teacher_id = ?) OR (classroom_id = ?) OR (class_id = ?))
             AND (
                 (start_time < ? AND end_time > ?) OR
                 (start_time >= ? AND start_time < ?)
             )
         ");
-        $stmtCheck->execute([$day_of_week, $academic_year, $semester, $teacher_id, $classroom_id, $end_time, $start_time, $start_time, $end_time]);
+        $stmtCheck->execute([$day_of_week, $academic_year, $semester, $teacher_id, $classroom_id, $class_id, $end_time, $start_time, $start_time, $end_time]);
 
         if ($stmtCheck->rowCount() > 0) {
-            header("Location: " . buildRedirect($class_id, $classroom_id, 'error', 'ไม่สามารถเพิ่มได้: เวลาทับซ้อนกับตารางสอนของครูหรือห้องเรียนนี้'));
+            // Determine which conflict it is for a better error message
+            $conflict = $stmtCheck->fetch();
+            $conflictDetail = $pdo->prepare("
+                SELECT ts.*, sub.name as subject_name, u.first_name as teacher_fname, u.last_name as teacher_lname, cl.level_name
+                FROM teaching_schedule ts
+                JOIN subjects sub ON ts.subject_id = sub.id
+                JOIN teachers t ON ts.teacher_id = t.id
+                JOIN users u ON t.user_id = u.id
+                LEFT JOIN classes cl ON ts.class_id = cl.id
+                WHERE ts.id = ?
+            ");
+            $conflictDetail->execute([$conflict['id']]);
+            $cd = $conflictDetail->fetch();
+            
+            $reason = 'เวลาทับซ้อน: ';
+            if ($cd) {
+                if ($cd['teacher_id'] == $teacher_id) {
+                    $reason .= "ครู {$cd['teacher_fname']} {$cd['teacher_lname']} สอนวิชา \"{$cd['subject_name']}\" อยู่แล้วในเวลานี้";
+                } elseif ($cd['class_id'] == $class_id) {
+                    $reason .= "ชั้น {$cd['level_name']} มีวิชา \"{$cd['subject_name']}\" อยู่แล้วในเวลานี้";
+                } else {
+                    $reason .= "ห้องเรียนนี้ถูกใช้อยู่แล้วในเวลานี้";
+                }
+            } else {
+                $reason .= 'ตารางสอนทับซ้อนกับข้อมูลที่มีอยู่';
+            }
+            
+            header("Location: " . buildRedirect($class_id, $classroom_id, 'error', $reason));
             exit();
         }
 
@@ -78,23 +105,49 @@ if ($action === 'update') {
     $redirect_classroom_id = $_POST['redirect_classroom_id'] ?? '';
 
     try {
-        // Check overlaps EXCEPT self
+        // Check overlaps EXCEPT self (teacher, classroom, AND class)
         $stmtCheck = $pdo->prepare("
             SELECT id FROM teaching_schedule 
             WHERE day_of_week = ? 
             AND academic_year = ? 
             AND semester = ? 
-            AND ((teacher_id = ?) OR (classroom_id = ?))
+            AND ((teacher_id = ?) OR (classroom_id = ?) OR (class_id = ?))
             AND id != ?
             AND (
                 (start_time < ? AND end_time > ?) OR
                 (start_time >= ? AND start_time < ?)
             )
         ");
-        $stmtCheck->execute([$day_of_week, $academic_year, $semester, $teacher_id, $classroom_id, $id, $end_time, $start_time, $start_time, $end_time]);
+        $stmtCheck->execute([$day_of_week, $academic_year, $semester, $teacher_id, $classroom_id, $class_id, $id, $end_time, $start_time, $start_time, $end_time]);
 
         if ($stmtCheck->rowCount() > 0) {
-            header("Location: " . buildRedirect($redirect_class_id, $redirect_classroom_id, 'error', 'ไม่สามารถแก้ไขได้: เวลาทับซ้อนกับตารางสอนอื่น'));
+            $conflict = $stmtCheck->fetch();
+            $conflictDetail = $pdo->prepare("
+                SELECT ts.*, sub.name as subject_name, u.first_name as teacher_fname, u.last_name as teacher_lname, cl.level_name
+                FROM teaching_schedule ts
+                JOIN subjects sub ON ts.subject_id = sub.id
+                JOIN teachers t ON ts.teacher_id = t.id
+                JOIN users u ON t.user_id = u.id
+                LEFT JOIN classes cl ON ts.class_id = cl.id
+                WHERE ts.id = ?
+            ");
+            $conflictDetail->execute([$conflict['id']]);
+            $cd = $conflictDetail->fetch();
+            
+            $reason = 'เวลาทับซ้อน: ';
+            if ($cd) {
+                if ($cd['teacher_id'] == $teacher_id) {
+                    $reason .= "ครู {$cd['teacher_fname']} {$cd['teacher_lname']} สอนวิชา \"{$cd['subject_name']}\" อยู่แล้วในเวลานี้";
+                } elseif ($cd['class_id'] == $class_id) {
+                    $reason .= "ชั้น {$cd['level_name']} มีวิชา \"{$cd['subject_name']}\" อยู่แล้วในเวลานี้";
+                } else {
+                    $reason .= "ห้องเรียนนี้ถูกใช้อยู่แล้วในเวลานี้";
+                }
+            } else {
+                $reason .= 'ตารางสอนทับซ้อนกับข้อมูลที่มีอยู่';
+            }
+            
+            header("Location: " . buildRedirect($redirect_class_id, $redirect_classroom_id, 'error', $reason));
             exit();
         }
 
